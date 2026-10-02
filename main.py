@@ -5,14 +5,24 @@ import pandas as pd
 from pybaseball import cache, statcast
 
 
-START_DATE = '2026-04-01'
-END_DATE = "2026-04-30"
+START_DATE = '2026-03-25'
+END_DATE = "2026-09-30"
 
 DB_PATH = "mlb.db"
 
 
 
 SHRINK_STRENGTH = 30 
+
+def fetch_first_inning_pitches(start: str, end: str) -> pd.DataFrame:
+    """Download Statcast pitches and keep only 1st-inning, regular-season ones."""
+    cache.enable()  # saves downloads to disk so re-running doesn't re-download
+
+    pitches = statcast(start_dt=start, end_dt=end)
+
+    # game_type "R" = regular season (filters out spring training/playoffs)
+    mask = (pitches["game_type"] == "R") & (pitches["inning"] == 1)
+    return pitches[mask].copy()
 
 
 
