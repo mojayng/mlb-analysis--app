@@ -1,12 +1,14 @@
 """
-probables.py - Postseason probable starters + their regular-season
+probables.py - Postseason probable starters joined with their regular-season
 first-inning stats.
 
-Run main.py first (with the full regular season loaded) so mlb.db exists.
-Keep both files in the same folder.
+DATA FLOW (explain this in an interview):
+    MLB Stats API (live schedule + announced starters)
+        -> one row per team per game
+        -> LEFT JOIN on player ID with the pitcher_first_inning table in SQLite
+        -> a DataFrame the Flask API (app.py) turns into JSON for React
 
-Setup:
-    pip install requests
+Run main.py first so mlb.db exists. Keep both files in the same folder.
 
 Run:
     python probables.py                          # today through the next 3 days
@@ -16,20 +18,21 @@ Run:
 
 import sqlite3
 import sys
+from contextlib import closing
 from datetime import date, timedelta
 
 import pandas as pd
 import requests
 
-# Importing from main.py doesn't re-run the data pull, because main.py
-# only calls main() when run directly (the __name__ check).
+# Safe to import: main.py only imports pybaseball lazily, inside the fetch
+# function, so this line doesn't trigger a data download.
 from main import DB_PATH
 
 SCHEDULE_URL = "https://statsapi.mlb.com/api/v1/schedule"
 
 # MLB game type codes for the postseason:
 #   F = Wild Card, D = Division Series, L = League Championship, W = World Series
-POSTSEASON_TYPES = {"F", "D", "L", "W"}
+POSTSEASON_TYPES = {"F", "D", "L", "W"}  # a set gives O(1) membership checks
 
 
 # ---------------------------------------------------------------------------
@@ -41,30 +44,32 @@ def fetch_probable_pitchers(start_date: str, end_date: str,
     """
     Return one row per team per game: that team's probable starter.
     Pitcher fields are None if the team hasn't announced a starter yet
-    (postseason starters usually get announced only a day or two ahead).
+    (postseason starters are usually announced only a day or two ahead).
     """
     params = {
-        "sportId": 1,                                # 1 = MLB
+        "sportId": 1,                             # 1 = MLB
         "startDate": start_date,
         "endDate": end_date,
-        "hydrate": "probablePitcher,team,venue",     # ask for extra detail
+        "hydrate": "probablePitcher,team,venue",  # ask the API to inline extra detail
     }
+    # timeout matters: without it, a hung network call would hang the whole app.
     response = requests.get(SCHEDULE_URL, params=params, timeout=15)
-    response.raise_for_status()  # raises on 4xx/5xx instead of failing silently
+    response.raise_for_status()  # turn 4xx/5xx into an exception, not silent bad data
     data = response.json()
 
     rows = []
-    # The response nests like: dates -> games -> teams -> away/home
+    # The response nests like: dates -> games -> teams -> away/home.
+    # I flatten it into one row per team-game, since that's the shape the
+    # join and the UI both want (a "tidy" table).
     for day in data.get("dates", []):
         for game in day["games"]:
-            # Skip regular-season/other games when we only want the postseason.
             if postseason_only and game.get("gameType") not in POSTSEASON_TYPES:
                 continue
 
             for side, other_side in (("away", "home"), ("home", "away")):
                 team = game["teams"][side]
                 opponent = game["teams"][other_side]
-                # .get() returns None instead of crashing if the key is missing
+                # `or {}` handles a missing OR null probablePitcher without crashing.
                 pitcher = team.get("probablePitcher") or {}
 
                 rows.append({
@@ -83,26 +88,27 @@ def fetch_probable_pitchers(start_date: str, end_date: str,
 
 
 # ---------------------------------------------------------------------------
-# Join with the stats we saved in main.py
+# Join with the stats saved by main.py
 # ---------------------------------------------------------------------------
 
 def attach_first_inning_stats(probables: pd.DataFrame) -> pd.DataFrame:
     """Add regular-season first-inning numbers to each probable starter."""
-    with sqlite3.connect(DB_PATH) as conn:
+    with closing(sqlite3.connect(DB_PATH)) as conn:
         stats = pd.read_sql("SELECT * FROM pitcher_first_inning", conn)
 
-    # The MLB Stats API and Statcast both use the same player IDs
-    # (MLBAM IDs), so we can join on them directly.
+    # The MLB Stats API and Statcast both use MLBAM player IDs, so we can join
+    # on the ID directly. Joining on names would be fragile (accents, suffixes).
     stats = stats.rename(columns={"pitcher": "pitcher_id", "starts": "fi_starts"})
     stats = stats.drop(columns=["pitcher_name"])  # keep the API's name instead
 
-    # how="left" keeps every probable starter, even ones with no stats
-    # (rookies, or pitchers outside the date range you pulled in main.py).
+    # how="left" keeps EVERY probable starter, even ones with no stats
+    # (rookies, or pitchers outside the date range pulled in main.py).
+    # Their stat columns just come back as NaN.
     return probables.merge(stats, on="pitcher_id", how="left")
 
 
 # ---------------------------------------------------------------------------
-# Run it
+# Command-line entry point
 # ---------------------------------------------------------------------------
 
 def main() -> None:
