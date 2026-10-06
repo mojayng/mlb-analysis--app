@@ -1,2 +1,2 @@
 # mlb-analysis--app
-an app that helps sports betting mlb games
+mlb analytics app for more insightful stats
