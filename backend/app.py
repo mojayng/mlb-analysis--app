@@ -20,7 +20,7 @@ from flask_cors import CORS
 
 # Reuse the functions you already wrote - the model/data code stays separate
 # from the web code, so you can test and backtest it without Flask.
-from backend.probables import attach_first_inning_stats, fetch_probable_pitchers
+from probables import attach_first_inning_stats, fetch_probable_pitchers
 
 app = Flask(__name__)
 CORS(app)  # lets your React dev server (a different port) call this API

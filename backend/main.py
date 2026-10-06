@@ -23,7 +23,7 @@ END_DATE = "2026-09-30"
 # Resolve the DB path relative to THIS file, not the current working directory.
 # Otherwise `python main.py` and `python app.py` from different folders would
 # silently create/read two different mlb.db files.
-DB_PATH = Path(__file__).parent / "mlb.db"
+DB_PATH = Path(__file__).resolve().parent.parent / "mlb.db"
 
 # Shrinkage strength k: how many "fake average starts" we add to every pitcher.
 # Bigger k = more skepticism about small samples. 30 is a judgment call; the

@@ -1,0 +1,44 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  max-width: none;
+  margin: 0 auto;
+  padding: 10px 32px;
+}
+
+.sub {
+  opacity: 0.7;
+}
+
+.scroll {
+  overflow-x: auto; /* wide table scrolls inside its box, not the whole page */
+  margin-top: 16px;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th,
+td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.3);
+}
+
+.tbd {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.error {
+  color: #c0392b;
+}
